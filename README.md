@@ -11,10 +11,10 @@ In addition to data compression, this approach also exhibits the capability to f
 ## Setup and Dependencies
 We run the code on Google Colab for now. The following dependencies are required:
 
-Python (version 3.10.11)
-TensorFlow (version 2.12.0)
-NumPy (version 1.22.4)
-Matplotlib (version 3.7.1)
+1. Python (version 3.10.11)
+2. TensorFlow (version 2.12.0)
+3. NumPy (version 1.22.4)
+4. Matplotlib (version 3.7.1)
 
 ## Dataset
 The preproceesed DAS data used in this project is stored on **Google Cloud**. The preprocessing steps include performing de-medianing, de-trending, and bandpass filtering. 
