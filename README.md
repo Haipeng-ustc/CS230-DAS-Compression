@@ -1,5 +1,5 @@
 ## CS230 Project
-Efficient Compression of DAS Data Using Autoencoders
+###Convolutional Autoencoder for Compressing and Preprocessing Distributed Acoustic Sensing Data from Urban Environments
 
 ## Project Description
 This project focuses on applying the autoencoder convolutional neural network to compress vast amounts of Distributed Acoustic Sensing (DAS) data. The primary objective is to achieve data compression with minimal loss, effectively reducing the size of DAS data while maintaining its usability for traffic monitoring and geophysical analysis. The approach utilizes a patch size of 32x32 and a latent space of 50 for each data patch, resulting in an impressive compression rate of 300X. However, it should be noted that a few car signals may experience less optimal reconstruction.
