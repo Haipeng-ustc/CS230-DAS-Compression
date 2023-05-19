@@ -2,7 +2,7 @@
 Efficient Compression of Preprocessed High-Frequency DAS Data Using Autoencoders
 
 
-## Project Discribtion
+## Project Description
 This project focuses on applying the autoencoder convolutional neural network to compress vast amounts of Distributed Acoustic Sensing (DAS) data. The primary objective is to achieve data compression with minimal loss, effectively reducing the size of DAS data while maintaining its usability for traffic monitoring and geophysical analysis. The approach utilizes a patch size of 32x32 and a latent space of 50 for each data patch, resulting in an impressive compression rate of 300X. However, it should be noted that a few car signals may experience less optimal reconstruction.
 
 Another key area for exploration will be the potential integration of preprocessing steps directly into a CAE. Specifically, we aim to replace some of the time-consuming preprocessing steps, such as specified noise or band-pass filtering within a CAE, which can make the workflow more efficient.
