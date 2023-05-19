@@ -24,7 +24,9 @@ The following improvements and enhancements can be considered for future iterati
 2. Investigate latent space size for a suitable trade-off between compression rate and reconstruction accuracy.
 3. Refine model performance by adjusting the weight between rate and distortion in the loss function.
 4. Fine-tune hyperparameters on the enlarged dataset for improved model performance.
-6. Explore potential integration of preprocessing steps into the autoencoder's workflow.
+6. Explore potential integration of preprocessing steps into the autoencoder's workflow, i.e., replacing some of the time-consuming preprocessing steps, such as specified noise or band-pass filtering within a CAE.
 7. Utilize structural likeness and frequency-wavenumber analysis to reasonably qualify errors between the reconstructed (decoded) and original DAS data.
+
+
 
 This project is licensed under the MIT License.
