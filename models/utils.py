@@ -210,3 +210,54 @@ def reconstruct_image_from_patches(patches, factors, original_shape, patch_size,
             patch_index += 1
 
     return reconstructed_image
+
+
+def load_patch_from_file(file_list, patch_size, overlap = False, add_noise = False, snr = 10.):
+    """Load the patches from files
+
+        Parameters
+        ----------
+        file_list : list
+            list of file names
+        patch_size : int
+            patch size
+        overlap : boolean
+            overlapped patches or not
+        add_noise : boolean
+            add noise or not
+        snr : float
+            signal to noise ratio
+        
+        Returns
+        -------
+        input_patches : list
+            list of input patches
+        ouput_patches : list
+            list of output patches
+        factors : list
+            list of normalization factors for each patch, which is used to 
+            recover the original scale of the data
+    """
+
+    # Extract image patches (we can join lists together from different files)
+    input_patches_all = []
+    ouput_patches_all = []
+    factors_all = []
+
+    for file in file_list:
+        print('Loading: %s'%(file))
+
+        # Load the data
+        pdata = np.load(file)['pdata']
+
+        # Extract patches and normalzation factor
+        input_patches, ouput_patches, factors = extract_image_patches(pdata, patch_size, add_noise = add_noise, snr = snr, overlap = overlap)
+
+        # union patches from different data
+        input_patches_all += input_patches
+        ouput_patches_all += ouput_patches
+        factors_all += factors
+
+    print("Number of patches in total: ", len(input_patches_all))
+
+    return input_patches_all, ouput_patches_all, factors_all
