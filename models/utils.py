@@ -95,7 +95,7 @@ def extract_image_patches(DAS_data, patch_size,  overlap = False,
             if add_noise:
                 input_patch = patch + add_noise_per_patch(patch, snr)
             else:
-                input_patch = np.copy(patch)
+                input_patch = patch
 
             # append
             input_patches.append(input_patch)
@@ -103,6 +103,61 @@ def extract_image_patches(DAS_data, patch_size,  overlap = False,
             factors.append(norm_factor)
 
     return input_patches, ouput_patches, factors
+
+
+def load_patch_from_file(file_list, patch_size, overlap = False, add_noise = False, snr = 10.):
+    """Load the patches from files
+
+        Parameters
+        ----------
+        file_list : list
+            list of file names
+        patch_size : int
+            patch size
+        overlap : boolean
+            overlapped patches or not
+        add_noise : boolean
+            add noise or not
+        snr : float
+            signal to noise ratio
+        
+        Returns
+        -------
+        input_patches : list
+            list of input patches
+        ouput_patches : list
+            list of output patches
+        factors : list
+            list of normalization factors for each patch, which is used to 
+            recover the original scale of the data
+    """
+
+    # Extract image patches (we can join lists together from different files)
+    input_patches_all = []
+    ouput_patches_all = []
+    factors_all = []
+
+    for file in file_list:
+        print('Loading: %s'%(file))
+
+        # Load the data
+        pdata = np.load(file)['pdata']
+
+        # Extract patches and normalzation factor
+        input_patches, ouput_patches, factors = extract_image_patches(pdata, 
+                                                    patch_size, 
+                                                    add_noise = add_noise, 
+                                                    snr = snr, 
+                                                    overlap = overlap)
+
+        # union patches from different data
+        input_patches_all += input_patches
+        ouput_patches_all += ouput_patches
+        factors_all += factors
+
+    print("Number of patches in total: ", len(input_patches_all))
+
+    return input_patches_all, ouput_patches_all, factors_all
 
 
 def prepare_das_dataset(input_patches, ouput_patches, train_ratio = 0.8, shuffle = True):
@@ -155,6 +210,13 @@ def prepare_das_dataset(input_patches, ouput_patches, train_ratio = 0.8, shuffle
     # noise are added. Otherwise their differences are the added random noises
     train_dataset = tf.data.Dataset.from_tensor_slices((train_data_input, train_data_ouput))
     valid_dataset = tf.data.Dataset.from_tensor_slices((valid_data_input, valid_data_ouput))
+
+    # Print info
+    print('\n')
+    print('Number of train data: ', len(train_dataset))
+    print('Number of valid data: ', len(valid_dataset))
+    print(train_dataset)
+    print(valid_dataset)
 
     return train_dataset, valid_dataset
 
@@ -212,52 +274,3 @@ def reconstruct_image_from_patches(patches, factors, original_shape, patch_size,
     return reconstructed_image
 
 
-def load_patch_from_file(file_list, patch_size, overlap = False, add_noise = False, snr = 10.):
-    """Load the patches from files
-
-        Parameters
-        ----------
-        file_list : list
-            list of file names
-        patch_size : int
-            patch size
-        overlap : boolean
-            overlapped patches or not
-        add_noise : boolean
-            add noise or not
-        snr : float
-            signal to noise ratio
-        
-        Returns
-        -------
-        input_patches : list
-            list of input patches
-        ouput_patches : list
-            list of output patches
-        factors : list
-            list of normalization factors for each patch, which is used to 
-            recover the original scale of the data
-    """
-
-    # Extract image patches (we can join lists together from different files)
-    input_patches_all = []
-    ouput_patches_all = []
-    factors_all = []
-
-    for file in file_list:
-        print('Loading: %s'%(file))
-
-        # Load the data
-        pdata = np.load(file)['pdata']
-
-        # Extract patches and normalzation factor
-        input_patches, ouput_patches, factors = extract_image_patches(pdata, patch_size, add_noise = add_noise, snr = snr, overlap = overlap)
-
-        # union patches from different data
-        input_patches_all += input_patches
-        ouput_patches_all += ouput_patches
-        factors_all += factors
-
-    print("Number of patches in total: ", len(input_patches_all))
-
-    return input_patches_all, ouput_patches_all, factors_all

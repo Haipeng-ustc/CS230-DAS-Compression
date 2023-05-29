@@ -112,7 +112,8 @@ def train_das_model(training_dataset, validation_dataset,
                     epochs = 15, 
                     batch_size = 128, 
                     learning_rate = 1e-3, 
-                    validation_freq = 1,):
+                    validation_freq = 1,
+                    launch_trainer = True):
     
     '''Trains a DAS compression model.
 
@@ -136,6 +137,15 @@ def train_das_model(training_dataset, validation_dataset,
         Learning rate.
     validation_freq: int
         Validation frequency.
+    launch_trainer: bool
+        Whether to launch the trainer or just return the model.
+    
+    Returns:
+    -------
+    trainer: DASCompressionTrainer
+        The trained model.
+    history: tf.keras.callbacks.History
+        The training history.
     '''
 
     # Create the model
@@ -149,13 +159,81 @@ def train_das_model(training_dataset, validation_dataset,
         loss_weights = dict(rate = 1., distortion = lmbda),
     )
 
-    # Train the model
-    history = trainer.fit(
-        training_dataset.map(add_rd_targets).batch(batch_size).prefetch(8),
-        epochs = epochs,
-        validation_data = validation_dataset.map(add_rd_targets).batch(batch_size).cache(),
-        validation_freq = validation_freq,
-        verbose=1,
-    )
+    if launch_trainer:
+        # Train the model
+        history = trainer.fit(
+            training_dataset.map(add_rd_targets).batch(batch_size).prefetch(8),
+            epochs = epochs,
+            validation_data = validation_dataset.map(add_rd_targets).batch(batch_size).cache(),
+            validation_freq = validation_freq,
+            verbose=1,
+        )
+    else:
+        history = None
 
     return trainer, history
+
+
+class DASCompressor(tf.keras.Model):
+    """Compresses DAS data to strings."""
+
+    def __init__(self, analysis_transform, entropy_model):
+        super().__init__()
+        self.analysis_transform = analysis_transform
+        self.entropy_model = entropy_model
+
+    def call(self, x):
+        # Ensure inputs are floats in the range (-255, 255).
+        x = tf.cast(x, self.compute_dtype) / 255.
+        y = self.analysis_transform(x)
+
+        # Return the exact information content of each patch.
+        _, bits = self.entropy_model(y, training=False)
+
+        return self.entropy_model.compress(y), bits
+
+
+class DASDecompressor(tf.keras.Model):
+    """Decompresses DAS data from strings."""
+
+    def __init__(self, entropy_model, synthesis_transform):
+        super().__init__()
+        self.entropy_model = entropy_model
+        self.synthesis_transform = synthesis_transform
+
+    def call(self, string):
+        y_hat = self.entropy_model.decompress(string, ())
+        x_hat = self.synthesis_transform(y_hat)
+        # Scale and cast back to 8-bit integer.
+        return tf.saturate_cast(tf.round(x_hat * 255.), tf.float32)
+
+
+def make_das_codec(trainer, **kwargs):
+    """Creates a DAS codec from a trained model.
+
+    The entropy model must be created with `compression=True` and the same
+    instance must be shared between compressor and decompressor.
+
+    Parameters:
+    ----------
+    trainer: DASCompressionTrainer
+        The trained model.
+    kwargs: dict
+        Keyword arguments passed to `tfc.ContinuousBatchedEntropyModel`.
+
+    Returns:
+    -------
+    compressor: DASCompressor
+        The compressor.
+    decompressor: DASDecompressor
+        The decompressor.
+    """
+    entropy_model = tfc.ContinuousBatchedEntropyModel(trainer.prior,
+                                                      coding_rank=1, 
+                                                      compression=True, 
+                                                      **kwargs)
+    
+    compressor = DASCompressor(trainer.analysis_transform, entropy_model)
+    decompressor = DASDecompressor(entropy_model, trainer.synthesis_transform)
+    
+    return compressor, decompressor
