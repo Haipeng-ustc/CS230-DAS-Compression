@@ -170,6 +170,7 @@ def train_das_model(training_dataset, validation_dataset,
         )
     else:
         history = None
+        
 
     return trainer, history
 
