@@ -1,8 +1,14 @@
 '''
-This file contains the model for the DAS compression using neural networks (Autoencoder).
-The original code is from TensorFlow Compression: 
+- Our model for DAS compression started from a model discussed 
+here: https://www.tensorflow.org/tutorials/generative/data_compression
+- The tutorial above states that the following paper inspired by the folowing
+paper: https://arxiv.org/abs/1611.01704
+- The original model can be found here: 
 https://github.com/tensorflow/compression
+- We have made modifications to fit our purpose, but our model is still
+quite similar to the original model
 
+Authors: Haipeng Li, Thomas Cullison, Hassan Almomin
 '''
 
 import tensorflow as tf
@@ -52,8 +58,8 @@ def make_synthesis_transform(patch_size):
       tf.keras.layers.Dense(500, use_bias=True, activation="leaky_relu", name="fc_1"),
       tf.keras.layers.Dense(50 * (patch_size//4)**2, use_bias=True, activation="leaky_relu", name="fc_2"),
       tf.keras.layers.Reshape((patch_size//4, patch_size//4, 50)),
-      tf.keras.layers.Conv2DTranspose(20, 5, use_bias=True, strides=2, padding="same", activation="leaky_relu", name="conv_1"),
-      tf.keras.layers.Conv2DTranspose(1, 5, use_bias=True, strides=2, padding="same", activation="leaky_relu", name="conv_2"),
+      tf.keras.layers.Conv2DTranspose(20, 5, use_bias=True, strides=2, padding="same", activation="leaky_relu", name="tconv_1"),
+      tf.keras.layers.Conv2DTranspose(1, 5, use_bias=True, strides=2, padding="same", activation="leaky_relu", name="tconv_2"),
     ], name="synthesis_transform")
 
 

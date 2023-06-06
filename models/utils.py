@@ -3,6 +3,78 @@ import random
 import numpy as np
 import tensorflow as tf
 
+from numba import jit, prange
+from skimage.util import view_as_blocks
+from time import time as cur_time
+
+#TAC: added this for channel normailzation by |energy|
+@jit(nopython=True, parallel=True)
+def norm_channel(data):
+  """
+    Normalize channels to attenuate noise and acount for
+    laser energy loss over distance.
+
+    This is a channel by channel normalization.
+
+    Function is JIT'ed for performance
+
+    
+    Paramters
+    -----------
+    data: DAS data
+
+    Returns
+    -----------
+    data = data/mean(abs(data))
+  """
+  cnorm_data = data.copy()
+  nchan = cnorm_data.shape[0]
+  schan = 1./nchan
+  for ic in prange(nchan):
+    icnorm = schan*np.sum(np.abs(cnorm_data[ic,:]))
+    cnorm = 1./icnorm
+    cnorm_data[ic,:] *= cnorm
+
+  return cnorm_data
+
+@jit(forceobj=True, parallel=True)
+def chan_xcorr(d0,d1,which_axis=-1):
+  """
+    Channel by Channel cross-correlation in parallel
+
+    Function is JIT'ed for parallelization
+
+    
+    Paramters
+    -----------
+    d0: 2D ndarray with shape=(num_channels,num_time-samples)
+    d1: 2D ndarray with shape=(num_channels,num_time-samples)
+    which_axis: options are 0 or -1. 
+    which_axis=0 --> correlate over channels for each time sample
+    which_axis=-1 --> correlate over time for each channel
+
+    Returns
+    -----------
+    xcorr_data = d0.cross_correlate_with(d1,channel_axis|time_axis)
+  """
+  xcorr_data = np.zeros_like(d0)
+
+  if which_axis == 0:
+    #for it in range(d0.shape[1]):
+    for it in prange(d0.shape[1]):
+      xcorr_data[:,it] = np.correlate(d0[:,it],d1[:,it],'same')
+      enorm = 1/(np.max(xcorr_data[:,it])+1e-5)
+      xcorr_data[:,it] *= enorm
+  
+  else:
+    #for ic in range(d0.shape[0]):
+    for ic in prange(d0.shape[0]):
+      xcorr_data[ic] = np.correlate(d0[ic],d1[ic],'same')
+      enorm = 1/(np.max(xcorr_data[ic,:])+1e-5)
+      xcorr_data[ic,:] *= enorm
+
+  return xcorr_data
+
 
 def add_noise_per_patch(image_patch, snr):
     """ Add noise to a patch of an image.
@@ -25,11 +97,7 @@ def add_noise_per_patch(image_patch, snr):
     noise_power = signal_power / snr
 
     # Generate Gaussian noise with zero mean and noise_power standard deviation
-    noise = np.random.normal(loc=0, scale=np.sqrt(noise_power), size=image_patch.shape)
-    noisy_patch = np.zeros_like(image_patch)
-    noisy_patch = noisy_patch + noise
-
-    return noisy_patch
+    return image_patch + np.random.normal(loc=0, scale=np.sqrt(noise_power), size=image_patch.shape)
 
 
 def extract_image_patches(DAS_data, patch_size,  overlap = False, 
@@ -83,6 +151,7 @@ def extract_image_patches(DAS_data, patch_size,  overlap = False,
             patch = DAS_data[y:y+patch_size, x:x+patch_size]
 
             # post-process the patch
+            #TAC: address shaping in prepare_das_dataset
             patch = patch.reshape(patch_size, patch_size, 1)
             patch.astype(np.float32)
 
@@ -93,15 +162,100 @@ def extract_image_patches(DAS_data, patch_size,  overlap = False,
 
             # add noise to the input image patches if add_noise is True
             if add_noise:
-                input_patch = patch + add_noise_per_patch(patch, snr)
-            else:
-                input_patch = patch
+                #input_patch = patch + add_noise_per_patch(patch, snr)
+                #TAC: for compatibility
+                input_patch = add_noise_per_patch(patch, snr)
+            #else:
+                #input_patch = patch
 
+            input_patch = patch
             # append
             input_patches.append(input_patch)
             ouput_patches.append(patch)
             factors.append(norm_factor)
 
+    return input_patches, ouput_patches, factors
+
+
+# TAC: I had to modify this function for more data. It is now 30X faster
+#      Most of the gain comes from vectorization
+def extract_image_patches_fast(DAS_data, patch_size,  overlap = False, 
+                          add_noise = False, snr = 0.5):
+    """ Divide the DAS data (channels by time samples) into small
+      patches with the size of patch_size
+
+        Parameters
+        ----------
+        DAS_data : numpy
+            DAS data (channels by time samples)
+        patch_size : int
+            patch size
+        overlap : boolean
+            overlapped patches or not
+        add_noise : boolean
+            add noise or not
+        snr : float
+            signal to noise ratio
+        
+        Returns
+        -------
+        input_patches : list
+            list of input patches
+        ouput_patches : list
+            list of output patches
+        factors : list
+            list of normalization factors for each patch, which is used to 
+            recover the original scale of the data
+    """
+    def pixel_norm(x):
+        norm = 255./np.nanmax(np.abs(x))
+        y = x*norm
+        return np.where(np.isnan(y),0,y), np.float32(norm)
+    
+    patch_norm = lambda x: (
+        pixel_norm(x)
+    )
+    noise_func = lambda x,snr: (
+        add_noise_per_patch(x, snr)
+    )
+
+    # create empty list
+    input_patches = []
+    ouput_patches = []
+    factors = [] 
+
+    # set overlapped patches or not
+    if overlap:
+        skip_patch_size = patch_size//2
+    else:
+        skip_patch_size = patch_size
+
+      
+    ht = patch_size
+    wt = patch_size
+    h_ht = ht//2 #TAC: half height 
+    h_wt = wt//2 #TAC: half width 
+    nht = int(ht*((DAS_data.shape[0]-0.5*ht)//ht))
+    nwt = int(wt*((DAS_data.shape[1]-0.5*wt)//wt))
+
+    pats = view_as_blocks(DAS_data[:nht,:nwt],block_shape=(ht,wt))
+    pats = pats.reshape((pats.shape[0]*pats.shape[1],pats.shape[2],pats.shape[3]))
+    rpat = None #TAC: for the shifted patches
+    if overlap:
+      rpat = view_as_blocks(DAS_data[h_ht:nht+h_ht,h_wt:nwt+h_wt],block_shape=(ht,wt))
+      rpat = rpat.reshape((rpat.shape[0]*rpat.shape[1],rpat.shape[2],rpat.shape[3]))
+      pats = np.concatenate((pats,rpat),axis=0) 
+      del rpat
+
+    ouput_patches, factors = zip(*list(map(patch_norm,pats)))
+    ouput_patches = list(ouput_patches)
+    factors = list(factors)
+    
+    input_patches = ouput_patches
+    if add_noise:
+      input_patches = list(map(noise_func,ouput_patches,[snr]*len(ouput_patches)))
+
+    del pats
     return input_patches, ouput_patches, factors
 
 
@@ -141,10 +295,18 @@ def load_patch_from_file(file_list, patch_size, overlap = False, add_noise = Fal
         print('Loading: %s'%(file))
 
         # Load the data
-        pdata = np.load(file)['pdata']
+        #pdata = np.load(file)['pdata']
+        pdata = norm_channel(np.load(file)['pdata'])
 
         # Extract patches and normalzation factor
-        input_patches, ouput_patches, factors = extract_image_patches(pdata, 
+        
+        #input_patches, ouput_patches, factors = extract_image_patches(pdata, 
+                                                    #patch_size, 
+                                                    #add_noise = add_noise, 
+                                                    #snr = snr, 
+                                                    #overlap = overlap)
+        #TAC: vectorized
+        input_patches, ouput_patches, factors = extract_image_patches_fast(pdata, 
                                                     patch_size, 
                                                     add_noise = add_noise, 
                                                     snr = snr, 
@@ -155,11 +317,14 @@ def load_patch_from_file(file_list, patch_size, overlap = False, add_noise = Fal
         ouput_patches_all += ouput_patches
         factors_all += factors
 
+        del pdata
+
     print("Number of patches in total: ", len(input_patches_all))
 
     return input_patches_all, ouput_patches_all, factors_all
 
 
+# TAC: too slow. now it's about 7-10x faster. Can support larger datasets
 def prepare_das_dataset(input_patches, ouput_patches, train_ratio = 0.8, shuffle = True):
     """Prepare the DAS dataset for training and validation
 
@@ -184,13 +349,17 @@ def prepare_das_dataset(input_patches, ouput_patches, train_ratio = 0.8, shuffle
     
     # Shuffle the data randomly (we can also do this using TensorFlow)
     if shuffle == True:
+        np.random.seed(int(cur_time())) #TAC: added seed for the reals.
+        #np.random.seed(13) #TAC: added seed for testing
         # Create a combined list of tuples
         combined_list = list(zip(input_patches, ouput_patches))
         # Shuffle the combined list
-        random.shuffle(combined_list)
+        np.random.shuffle(combined_list)
         # Unzip the shuffled list to retrieve the shuffled lists
         input_patches, ouput_patches = zip(*combined_list)
 
+
+    
     # Calculate the split index based on the train_ratio
     split_index = int(len(input_patches) * train_ratio)
 
@@ -201,15 +370,34 @@ def prepare_das_dataset(input_patches, ouput_patches, train_ratio = 0.8, shuffle
     valid_data_ouput = ouput_patches[split_index:]
 
     # Convert the Python lists to TensorFlow tensors
-    train_data_input = tf.convert_to_tensor(train_data_input, dtype=tf.float32)
-    train_data_ouput = tf.convert_to_tensor(train_data_ouput, dtype=tf.float32)
-    valid_data_input = tf.convert_to_tensor(valid_data_input, dtype=tf.float32)
-    valid_data_ouput = tf.convert_to_tensor(valid_data_ouput, dtype=tf.float32)
+    #train_data_input = tf.convert_to_tensor(train_data_input, dtype=tf.float32)
+    #train_data_ouput = tf.convert_to_tensor(train_data_ouput, dtype=tf.float32)
+    #valid_data_input = tf.convert_to_tensor(valid_data_input, dtype=tf.float32)
+    #valid_data_ouput = tf.convert_to_tensor(valid_data_ouput, dtype=tf.float32)
+    train_data_input = tf.data.Dataset.from_tensor_slices(list(train_data_input))
+    train_data_ouput = tf.data.Dataset.from_tensor_slices(list(train_data_ouput))
+    valid_data_input = tf.data.Dataset.from_tensor_slices(list(valid_data_input))
+    valid_data_ouput = tf.data.Dataset.from_tensor_slices(list(valid_data_ouput))
+
+    #TAC: reshape for tensorflow (this is NOT compatible with Haipeng's original funcs)
+    # tf_tensor does not have the same indexing scheme as numpy. So memory copies
+    # are invoked if we add np.newaxis at axis 2, haven't tested if we aded it axis=0
+    # or use transpose then add axis zero.
+    pshape = (input_patches[0].shape[0],input_patches[0].shape[1],1)
+
+    train_data_input = train_data_input.map(lambda x: tf.reshape(x, pshape)) 
+    train_data_ouput = train_data_ouput.map(lambda x: tf.reshape(x, pshape)) 
+    valid_data_input = valid_data_input.map(lambda x: tf.reshape(x, pshape)) 
+    valid_data_ouput = valid_data_ouput.map(lambda x: tf.reshape(x, pshape)) 
+    
 
     # Create TensorFlow datasets. The output is the same as the input if no 
     # noise are added. Otherwise their differences are the added random noises
-    train_dataset = tf.data.Dataset.from_tensor_slices((train_data_input, train_data_ouput))
-    valid_dataset = tf.data.Dataset.from_tensor_slices((valid_data_input, valid_data_ouput))
+    #train_dataset = tf.data.Dataset.from_tensor_slices((train_data_input, train_data_ouput))
+    #valid_dataset = tf.data.Dataset.from_tensor_slices((valid_data_input, valid_data_ouput))
+    #TAC now we have a Dataset already, so we zip them instead
+    train_dataset = tf.data.Dataset.zip((train_data_input, train_data_ouput))
+    valid_dataset = tf.data.Dataset.zip((valid_data_input, valid_data_ouput))
 
     # Print info
     print('\n')
