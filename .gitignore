@@ -3,16 +3,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-
 # Jupyter notebook
 .ipynb_checkpoints
 profile_default/
 ipython_config.py
 
-
 # data
 data/
 *.npz
+
+# results
+results/
 
 # macOS
 .DS_Store
