@@ -20,8 +20,6 @@ The data used in this project can be obtained by contacting one of the authors. 
 ## Future Enhancements
 Explore potential integration of preprocessing steps into the autoencoder's workflow, i.e., replacing some of the time-consuming preprocessing steps, such as specified noise or band-pass filtering within a CAE.
 
-This project is licensed under the MIT License.
-
 ## Authors
 
 Hassan Almomin (almomiha@stanford.edu)
@@ -30,6 +28,5 @@ Thomas Cullison (tculliso@stanford.edu)
 
 Haipeng Li (haipeng@stanford.edu)
 
-Department of Geophysics
-Stanford University
+Department of Geophysics, Stanford University
 
