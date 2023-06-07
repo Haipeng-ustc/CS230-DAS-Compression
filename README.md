@@ -15,7 +15,7 @@ We run the code on Google Colab for now. The following dependencies are required
 4. Matplotlib (version 3.7.1)
 
 ## Dataset
-The data used in this project can be obtained by contacting one of the authors. Please refer to the the Readme file in the data foler. 
+The data used in this project can be obtained by contacting one of the authors. Please refer to the the Readme file in the data folder. 
 
 ## Future Enhancements
 Explore potential integration of preprocessing steps into the autoencoder's workflow, i.e., replacing some of the time-consuming preprocessing steps, such as specified noise or band-pass filtering within a CAE.
