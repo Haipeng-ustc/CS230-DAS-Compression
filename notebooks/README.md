@@ -19,3 +19,13 @@ SMCityDAS_Milestone_TestModelFromDis.ipynb : Notebook used to test the model loa
 ```
 SMCityDAS_HyperparameterSearch_train.py : Script used to perform hyperparameter tuning on the training set.
 SMCityDAS_HyperparameterSearch_test.ipynb : Notebook used to test the hyperparameter tuning script.
+```
+
+### Processed Data and Model Visualization
+
+```
+SMCityDAS_ProcessedData_ModelPlot.ipynb : Notebook used to plot processed data and and model used in this study.
+```
+
+
+
