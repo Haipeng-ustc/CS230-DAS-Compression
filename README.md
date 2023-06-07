@@ -1,5 +1,5 @@
 ## CS230 Project
-### Convolutional Autoencoder for Compressing and Preprocessing Distributed Acoustic Sensing Data from Urban Environments
+### Convolutional Autoencoder for Compressing Distributed Acoustic Sensing Data from Urban Environments
 
 The Autoencoder model is based on Lossy Data Compression from Tensorflow's official tutorial: https://www.tensorflow.org/tutorials/generative/data_compression
 
